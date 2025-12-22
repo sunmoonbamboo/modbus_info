@@ -1,0 +1,17 @@
+# 项目依赖（供非uv用户使用）
+# 推荐使用 uv 管理依赖：uv sync
+
+# 注意：MinerU 需要单独安装
+# uv pip install "mineru[core]"
+
+loguru>=0.7.2
+openai>=1.54.0
+python-dotenv>=1.0.1
+pandas>=2.2.0
+json-repair>=0.25.0
+
+# 开发依赖
+pytest>=8.0.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
