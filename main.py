@@ -47,6 +47,12 @@ def main():
         action="store_true",
         help="重新解析PDF文件（默认使用已有的Markdown文件）"
     )
+    parser.add_argument(
+        "--address-offset",
+        type=int,
+        default=0,
+        help="地址偏移量，取值范围 [0, 10)（默认：0）"
+    )
     
     args = parser.parse_args()
     
@@ -62,11 +68,16 @@ def main():
         # 验证配置
         config.validate()
         
+        # 验证地址偏移量范围
+        if not (0 <= args.address_offset < 10):
+            raise ValueError(f"地址偏移量必须在 [0, 10) 范围内，当前值: {args.address_offset}")
+        
         # 创建流程实例
         output_dir = Path(args.output_dir) if args.output_dir else config.OUTPUT_DIR
         pipeline = ModbusPipeline(
             output_dir=output_dir,
-            controller_name=args.controller
+            controller_name=args.controller,
+            address_offset=args.address_offset
         )
         
         if args.batch:

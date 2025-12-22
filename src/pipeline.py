@@ -18,7 +18,8 @@ class ModbusPipeline:
     def __init__(
         self,
         output_dir: Optional[Path] = None,
-        controller_name: str = "default"
+        controller_name: str = "default",
+        address_offset: int = 0
     ):
         """
         初始化流程
@@ -26,14 +27,19 @@ class ModbusPipeline:
         Args:
             output_dir: 输出目录，默认为配置中的输出目录
             controller_name: 控制器名称，默认为'default'
+            address_offset: 地址偏移量，默认为0，范围[0, 10)
         """
         self.output_dir = output_dir or config.OUTPUT_DIR
         self.controller_name = controller_name
+        self.address_offset = address_offset
         
         # 初始化各个模块
         self.pdf_parser = PDFParser(output_dir=self.output_dir)
         self.ai_extractor = AIExtractor()
-        self.csv_exporter = CSVExporter(controller_name=controller_name)
+        self.csv_exporter = CSVExporter(
+            controller_name=controller_name,
+            address_offset=address_offset
+        )
         
         logger.info("ModbusPipeline 初始化完成")
     
@@ -173,7 +179,8 @@ def process_pdf(
     pdf_path: Path,
     output_csv_path: Optional[Path] = None,
     controller_name: str = "default",
-    parse_pdf: bool = False
+    parse_pdf: bool = False,
+    address_offset: int = 0
 ) -> Path:
     """
     便捷函数：处理单个PDF文件
@@ -183,10 +190,14 @@ def process_pdf(
         output_csv_path: 输出CSV路径
         controller_name: 控制器名称，默认为'default'
         parse_pdf: 是否重新解析PDF
+        address_offset: 地址偏移量，默认为0
         
     Returns:
         输出的CSV文件路径
     """
-    pipeline = ModbusPipeline(controller_name=controller_name)
+    pipeline = ModbusPipeline(
+        controller_name=controller_name,
+        address_offset=address_offset
+    )
     return pipeline.process(pdf_path, output_csv_path, parse_pdf=parse_pdf)
 

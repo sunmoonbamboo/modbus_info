@@ -147,6 +147,7 @@ class AIExtractor:
   {{
     "MeasuringPointName": "测量点名称",
     "thinking": "思考过程",
+    "exist": false or true,
     "其它字段": "......"
   }},
   ...

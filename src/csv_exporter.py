@@ -76,14 +76,16 @@ class CSVExporter:
         'byteOrder': ''
     }
     
-    def __init__(self, controller_name: str = "default"):
+    def __init__(self, controller_name: str = "default", address_offset: int = 0):
         """
         初始化CSV导出器
         
         Args:
             controller_name: 控制器名称，默认为'default'
+            address_offset: 地址偏移量，默认为0，范围[0, 10)
         """
         self.controller_name = controller_name
+        self.address_offset = address_offset
         self.default_values = self.DEFAULT_VALUES.copy()
         self.default_values['ControllerName'] = controller_name
     
@@ -138,6 +140,10 @@ class CSVExporter:
         standardized = []
         
         for point in data_points:
+            
+            if not point.get('exist', False):
+                continue
+            
             # 创建一个包含所有默认值的新记录
             record = self.default_values.copy()
             
@@ -160,9 +166,9 @@ class CSVExporter:
             if record['BitIndex'] == '':
                 record['BitIndex'] = ''
             
-            # # 格式化Address（如果需要）
-            # if record.get('Address'):
-            #     record['Address'] = self._format_address(record['Address'])
+            # 格式化Address并应用偏移量
+            if record.get('Address'):
+                record['Address'] = self._format_address(record['Address'])
             
             standardized.append(record)
         
@@ -170,39 +176,52 @@ class CSVExporter:
     
     def _format_address(self, address: str) -> str:
         """
-        格式化地址
+        格式化地址并应用偏移量
         
         Args:
-            address: 原始地址
+            address: 原始地址（如：3X0001, 4X0120）
             
         Returns:
-            格式化后的地址
+            格式化并应用偏移后的地址
         """
         if not address:
             return ''
         
-        # 确保地址格式正确（例如：0x0002）
         address = str(address).strip()
         
-        # 如果是十进制数字，转换为十六进制
-        if address.isdigit():
-            return f"0x{int(address):04X}"
+        # 分离小数点部分（如：3X0000.0 -> address="3X0000", decimal_suffix=".0"）
+        decimal_suffix = ''
+        if '.' in address:
+            parts = address.split('.', 1)
+            address = parts[0]
+            decimal_suffix = '.' + parts[1]
         
-        # 如果已经是十六进制格式但没有0x前缀
-        if not address.startswith('0x') and not address.startswith('0X'):
+        # 解析地址格式：功能码 + 地址
+        # 支持格式：3X0001, 4X0120
+        import re
+        
+        # 匹配 Modbus 格式：3X0001, 4X0120
+        modbus_pattern = r'^([0-9])X([0-9]+)$'
+        match = re.match(modbus_pattern, address, re.IGNORECASE)
+        
+        if match:
+            # Modbus 格式
+            function_code = match.group(1)
+            addr_str = match.group(2)
+            
             try:
-                int(address, 16)
-                return f"0x{address.upper()}"
+                # 转换为整数（十进制），应用偏移
+                addr_int = int(addr_str)
+                addr_int += self.address_offset
+                
+                # 格式化输出，保持原有位数，并拼接回小数部分
+                addr_width = len(addr_str)
+                return f"{function_code}X{addr_int:0{addr_width}d}{decimal_suffix}"
             except ValueError:
-                pass
+                return address + decimal_suffix
         
-        # 统一转换为大写
-        if address.startswith('0x') or address.startswith('0X'):
-            parts = address.split('x')
-            if len(parts) == 2:
-                return f"0X{parts[1].upper()}"
-        
-        return address
+        # 无法解析的格式，返回原值
+        return address + decimal_suffix
     
     def export_with_validation(
         self,
