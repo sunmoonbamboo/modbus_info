@@ -9,6 +9,7 @@ openai>=1.54.0
 python-dotenv>=1.0.1
 pandas>=2.2.0
 json-repair>=0.25.0
+gradio>=4.0.0
 
 # 开发依赖
 pytest>=8.0.0

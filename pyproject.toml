@@ -11,6 +11,7 @@ dependencies = [
     "pandas>=2.2.0",
     "mineru[core]>=2.6.8",
     "json-repair>=0.54.3",
+    "gradio>=4.0.0",
 ]
 
 [project.optional-dependencies]
