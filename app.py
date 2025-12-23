@@ -283,14 +283,14 @@ class ModbusGradioApp:
             gr.Markdown("""
             # 📋 Modbus协议信息提取工具
             
-            这个工具可以从Modbus协议PDF文档中自动提取关键点位信息，并导出为CSV格式。
+            从PDF文档自动提取Modbus点位信息并导出为CSV格式 | 基于AI的智能识别
             """)
             
             # 存储上传文件的路径
             pdf_path_state = gr.State(value="")
             
             with gr.Row():
-                with gr.Column(scale=1):
+                with gr.Column(scale=2):
                     gr.Markdown("### 1️⃣ 上传协议文件")
                     
                     # PDF上传
@@ -302,52 +302,53 @@ class ModbusGradioApp:
                     upload_status = gr.Textbox(
                         label="上传状态",
                         interactive=False,
-                        lines=3
+                        lines=2
                     )
                     
-                    gr.Markdown("---")
                     gr.Markdown("### 2️⃣ 配置参数")
                     
-                    # 控制器名称
-                    controller_name = gr.Textbox(
-                        label="控制器名称 *",
-                        placeholder="请输入控制器名称（必填）",
-                        value="default"
-                    )
+                    with gr.Row():
+                        # 控制器名称
+                        controller_name = gr.Textbox(
+                            label="控制器名称 *",
+                            placeholder="请输入控制器名称（必填）",
+                            value="default"
+                        )
+                        
+                        # 地址偏移量
+                        address_offset = gr.Number(
+                            label="地址偏移量",
+                            value=0,
+                            minimum=0,
+                            maximum=9,
+                            step=1,
+                            info="取值范围: [0, 10)"
+                        )
                     
-                    # 地址偏移量
-                    address_offset = gr.Number(
-                        label="地址偏移量",
-                        value=0,
-                        minimum=0,
-                        maximum=9,
-                        step=1,
-                        info="取值范围: [0, 10)"
-                    )
-                    
-                    gr.Markdown("---")
-                    gr.Markdown("### 3️⃣ 配置点位映射")
-                    gr.Markdown("*格式: {\"描述\": \"标准编码\"}，定义需要提取的点位。修改仅在当前会话生效*")
-                    
-                    # 设备映射配置编辑器
-                    dev_mapping_config = gr.Code(
-                        label="设备映射配置（dev_mapping）",
-                        language="json",
-                        value=self.dict_to_json(self.default_dev_mapping),
-                        lines=12
-                    )
-                    
-                    gr.Markdown("---")
-                    gr.Markdown("### 4️⃣ 配置点位元数据")
-                    gr.Markdown("*格式: {\"字段名\": \"字段说明\"}，定义提取字段的含义。修改仅在当前会话生效*")
-                    
-                    # 点位元数据配置编辑器
-                    metadata_config = gr.Code(
-                        label="点位元数据配置（point_metadata）",
-                        language="json",
-                        value=self.dict_to_json(self.default_point_metadata),
-                        lines=12
-                    )
+                    # 高级配置（可折叠）
+                    with gr.Accordion("⚙️ 高级配置（可选）", open=False):
+                        gr.Markdown("💡 *修改仅在当前会话生效，不会保存到配置文件*")
+                        
+                        with gr.Tabs():
+                            with gr.Tab("📝 点位映射 (dev_mapping)"):
+                                gr.Markdown("*定义需要提取的点位。格式: {\"描述\": \"标准编码\"}*")
+                                # 设备映射配置编辑器
+                                dev_mapping_config = gr.Code(
+                                    label="",
+                                    language="json",
+                                    value=self.dict_to_json(self.default_dev_mapping),
+                                    lines=8
+                                )
+                            
+                            with gr.Tab("🏷️ 元数据 (point_metadata)"):
+                                gr.Markdown("*定义提取字段的含义。格式: {\"字段名\": \"字段说明\"}*")
+                                # 点位元数据配置编辑器
+                                metadata_config = gr.Code(
+                                    label="",
+                                    language="json",
+                                    value=self.dict_to_json(self.default_point_metadata),
+                                    lines=8
+                                )
                     
                     # 提取按钮
                     extract_btn = gr.Button(
@@ -356,24 +357,28 @@ class ModbusGradioApp:
                         size="lg"
                     )
                 
-                with gr.Column(scale=2):
+                with gr.Column(scale=3):
                     gr.Markdown("### 📊 提取结果")
                     
-                    # 提取过程显示
-                    process_output = gr.Textbox(
-                        label="提取过程",
-                        lines=12,
-                        max_lines=20,
-                        interactive=False,
-                        show_copy_button=True
-                    )
-                    
-                    # 结果表格
-                    result_table = gr.Dataframe(
-                        label="提取的点位信息",
-                        wrap=True,
-                        interactive=False
-                    )
+                    # 使用Tabs组织提取过程和结果
+                    with gr.Tabs():
+                        with gr.Tab("📋 提取过程"):
+                            # 提取过程显示
+                            process_output = gr.Textbox(
+                                label="",
+                                lines=20,
+                                max_lines=30,
+                                interactive=False,
+                                show_copy_button=True
+                            )
+                        
+                        with gr.Tab("📊 数据预览"):
+                            # 结果表格
+                            result_table = gr.Dataframe(
+                                label="",
+                                wrap=True,
+                                interactive=False
+                            )
                     
                     # CSV文件路径（隐藏）
                     csv_path_state = gr.State(value="")
@@ -381,7 +386,8 @@ class ModbusGradioApp:
                     # 下载按钮
                     download_btn = gr.DownloadButton(
                         label="📥 下载CSV文件",
-                        visible=False
+                        visible=False,
+                        size="lg"
                     )
             
             # 事件处理
@@ -415,33 +421,31 @@ class ModbusGradioApp:
                 outputs=[download_btn, download_btn]
             )
             
-            gr.Markdown("""
-            ---
-            ### 📝 使用说明
-            
-            1. **上传文件**: 选择Modbus协议的PDF文件（仅支持PDF格式）
-            2. **配置参数**: 
-               - 控制器名称：必填，用于标识设备
-               - 地址偏移量：可选，默认为0，范围[0, 10)
-            3. **配置点位映射（dev_mapping）**: 
-               - 定义需要从PDF中提取的点位
-               - 格式为JSON: `{"点位描述": "标准编码"}`
-               - ⚠️ 修改仅在当前会话生效，不会保存到配置文件
-            4. **配置点位元数据（point_metadata）**: 
-               - 定义提取字段的含义和说明
-               - 格式为JSON: `{"字段名": "字段说明"}`
-               - ⚠️ 修改仅在当前会话生效，不会保存到配置文件
-            5. **开始提取**: 点击"开始提取"按钮，系统将自动：
-               - 解析PDF文件
-               - 使用AI提取点位信息
-               - 生成CSV文件
-            6. **查看结果**: 
-               - 在右侧查看提取过程和结果表格
-               - 点击"下载CSV文件"保存结果
-            
-            ---
-            💡 **提示**: 提取过程可能需要几分钟，请耐心等待...
-            """)
+            with gr.Accordion("📖 使用说明", open=False):
+                gr.Markdown("""
+                ### 快速开始
+                
+                1. **上传文件**: 选择Modbus协议的PDF文件（仅支持PDF格式）
+                2. **配置参数**: 填写控制器名称（必填）和地址偏移量（可选）
+                3. **开始提取**: 点击"🚀 开始提取"按钮
+                4. **查看结果**: 在右侧的"提取过程"和"数据预览"标签页中查看结果
+                5. **下载文件**: 提取完成后点击"📥 下载CSV文件"保存结果
+                
+                ### 高级配置（可选）
+                
+                - **点位映射（dev_mapping）**: 定义需要从PDF中提取的点位，格式为 `{"点位描述": "标准编码"}`
+                - **元数据（point_metadata）**: 定义提取字段的含义和说明，格式为 `{"字段名": "字段说明"}`
+                - ⚠️ **注意**: 配置修改仅在当前会话生效，不会保存到配置文件
+                
+                ### 系统流程
+                
+                1. 解析PDF文件为Markdown格式
+                2. 使用AI模型（Gemini）提取点位信息
+                3. 根据配置生成标准CSV文件
+                
+                ---
+                💡 **提示**: 提取过程可能需要几分钟，请耐心等待...
+                """)
         
         return interface
     
