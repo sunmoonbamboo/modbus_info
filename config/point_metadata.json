@@ -18,5 +18,5 @@
     "DeadZonePercent":"死区百分比，默认值为0",
     "Gain": "在数据类型为WORD时，表示数据转换的系数，默认值为1，需要根据数据描述解析出来;在数据类型为BIT时，此字段为空字符串",
     "Offset": "在数据类型为WORD时，表示数据转换的偏移，默认值为0，需要根据数据描述解析出来;在数据类型为BIT时，此字段为空字符串",
-    "Transform Type": "数据运算类型，当数据类型为WORD时为zoom，其它情况下为none"
+    "Transform Type": "数据运算类型，当DataType为WORD时为zoom;其它情况下为none"
 }

@@ -21,7 +21,9 @@ class ModbusPipeline:
         controller_name: str = "default",
         address_offset: int = 0,
         dev_mapping: Optional[Dict[str, str]] = None,
-        point_metadata: Optional[Dict[str, str]] = None
+        point_metadata: Optional[Dict[str, str]] = None,
+        use_web_api: bool = True,
+        api_url: str = "http://127.0.0.1:8000"
     ):
         """
         初始化流程
@@ -32,21 +34,29 @@ class ModbusPipeline:
             address_offset: 地址偏移量，默认为0，范围[0, 10)
             dev_mapping: 设备映射配置，默认从文件读取
             point_metadata: 点位元数据配置，默认从文件读取
+            use_web_api: 是否使用Web API方式解析PDF，默认为True
+            api_url: Web API服务地址，默认为http://127.0.0.1:8000
         """
         self.output_dir = output_dir or config.OUTPUT_DIR
         self.controller_name = controller_name
         self.address_offset = address_offset
+        self.use_web_api = use_web_api
+        self.api_url = api_url
         
         # 初始化各个模块
-        self.pdf_parser = PDFParser(output_dir=self.output_dir)
-        self.ai_extractor = AIExtractor(dev_mapping=dev_mapping)
+        self.pdf_parser = PDFParser(
+            output_dir=self.output_dir,
+            use_web_api=use_web_api,
+            api_url=api_url
+        )
+        self.ai_extractor = AIExtractor(dev_mapping=dev_mapping, point_metadata=point_metadata)
         self.csv_exporter = CSVExporter(
             controller_name=controller_name,
             address_offset=address_offset,
             point_metadata=point_metadata
         )
         
-        logger.info("ModbusPipeline 初始化完成")
+        logger.info(f"ModbusPipeline 初始化完成 (解析方式: {'Web API' if use_web_api else '本地'})")
     
     def process(
         self,

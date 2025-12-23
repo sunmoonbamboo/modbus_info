@@ -160,6 +160,8 @@ class ModbusGradioApp:
         address_offset: int,
         dev_mapping_config: str,
         metadata_config: str,
+        use_web_api: bool,
+        api_url: str,
         progress=gr.Progress()
     ):
         """
@@ -171,6 +173,8 @@ class ModbusGradioApp:
             address_offset: 地址偏移量
             dev_mapping_config: 设备映射配置（JSON字符串）
             metadata_config: 点位元数据配置（JSON字符串）
+            use_web_api: 是否使用Web API方式解析PDF
+            api_url: Web API服务地址
             progress: Gradio进度条对象
             
         Yields:
@@ -200,14 +204,17 @@ class ModbusGradioApp:
             
             # 初始化进度
             progress(0, desc="正在初始化...")
-            yield "🔄 正在初始化处理流程...\n", None, None
+            parse_mode = "Web API" if use_web_api else "本地"
+            yield f"🔄 正在初始化处理流程... (解析方式: {parse_mode})\n", None, None
             
             # 创建Pipeline实例（使用当前会话的配置，不写入文件）
             pipeline = ModbusPipeline(
                 controller_name=controller_name,
                 address_offset=address_offset,
                 dev_mapping=dev_mapping_dict,
-                point_metadata=metadata_dict
+                point_metadata=metadata_dict,
+                use_web_api=use_web_api,
+                api_url=api_url
             )
             
             pdf_file = Path(pdf_path)
@@ -325,8 +332,30 @@ class ModbusGradioApp:
                             info="取值范围: [0, 10)"
                         )
                     
+                    # PDF解析方式配置
+                    gr.Markdown("### 3️⃣ PDF解析方式")
+                    with gr.Row():
+                        use_web_api = gr.Radio(
+                            label="解析方式",
+                            choices=[
+                                ("Web API（推荐，更快）", True),
+                                ("本地解析（需要GPU）", False)
+                            ],
+                            value=True,
+                            info="选择PDF解析的方式"
+                        )
+                    
+                    with gr.Row():
+                        api_url = gr.Textbox(
+                            label="Web API 地址",
+                            value="http://127.0.0.1:8000",
+                            placeholder="请输入Web API服务地址",
+                            info="仅在使用Web API方式时有效"
+                        )
+                    
                     # 高级配置（可折叠）
-                    with gr.Accordion("⚙️ 高级配置（可选）", open=False):
+                    gr.Markdown("### 4️⃣ 高级配置（可选）")
+                    with gr.Accordion("⚙️ 点位映射与元数据配置", open=False):
                         gr.Markdown("💡 *修改仅在当前会话生效，不会保存到配置文件*")
                         
                         with gr.Tabs():
@@ -407,7 +436,9 @@ class ModbusGradioApp:
                     controller_name,
                     address_offset,
                     dev_mapping_config,
-                    metadata_config
+                    metadata_config,
+                    use_web_api,
+                    api_url
                 ],
                 outputs=[
                     process_output,
@@ -427,9 +458,24 @@ class ModbusGradioApp:
                 
                 1. **上传文件**: 选择Modbus协议的PDF文件（仅支持PDF格式）
                 2. **配置参数**: 填写控制器名称（必填）和地址偏移量（可选）
-                3. **开始提取**: 点击"🚀 开始提取"按钮
-                4. **查看结果**: 在右侧的"提取过程"和"数据预览"标签页中查看结果
-                5. **下载文件**: 提取完成后点击"📥 下载CSV文件"保存结果
+                3. **选择解析方式**: 
+                   - **Web API（推荐）**: 需要先启动解析服务，速度更快
+                   - **本地解析**: 直接在本地解析，需要GPU支持
+                4. **开始提取**: 点击"🚀 开始提取"按钮
+                5. **查看结果**: 在右侧的"提取过程"和"数据预览"标签页中查看结果
+                6. **下载文件**: 提取完成后点击"📥 下载CSV文件"保存结果
+                
+                ### PDF解析方式
+                
+                - **Web API方式**（推荐）: 
+                  - 需要先启动解析服务: `uv run python -m mineru.server --host 0.0.0.0 --port 8000`
+                  - 解析速度更快，支持分布式部署
+                  - 默认地址: http://127.0.0.1:8000
+                
+                - **本地解析方式**: 
+                  - 直接在本地运行MinerU进行解析
+                  - 需要GPU支持，速度较慢
+                  - 无需额外服务
                 
                 ### 高级配置（可选）
                 
@@ -439,7 +485,7 @@ class ModbusGradioApp:
                 
                 ### 系统流程
                 
-                1. 解析PDF文件为Markdown格式
+                1. 解析PDF文件为Markdown格式（Web API 或 本地）
                 2. 使用AI模型（Gemini）提取点位信息
                 3. 根据配置生成标准CSV文件
                 

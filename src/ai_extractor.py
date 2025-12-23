@@ -19,7 +19,8 @@ class AIExtractor:
         api_key: Optional[str] = None,
         model: Optional[str] = None,
         base_url: Optional[str] = None,
-        dev_mapping: Optional[Dict[str, str]] = None
+        dev_mapping: Optional[Dict[str, str]] = None,
+        point_metadata: Optional[Dict[str, str]] = None
     ):
         """
         初始化AI提取器
@@ -57,18 +58,31 @@ class AIExtractor:
         # 加载设备映射配置（如果提供了运行时配置则使用，否则从文件加载）
         self.dev_mapping = dev_mapping if dev_mapping is not None else self._load_dev_mapping()
         
+        self.point_metadata = point_metadata if point_metadata is not None else self._load_point_metadata()
+        
         # 加载提示词
         self.system_prompt = self._load_system_prompt()
     
     def _load_dev_mapping(self) -> Dict:
         """加载设备映射配置"""
         try:
-            with open(config.POINT_METADATA_FILE, 'r', encoding='utf-8') as f:
+            with open(config.DEV_MAPPING_FILE, 'r', encoding='utf-8') as f:
                 mapping = json.load(f)
-            logger.info(f"设备映射配置加载成功: {config.POINT_METADATA_FILE}")
+            logger.info(f"设备映射配置加载成功: {config.DEV_MAPPING_FILE}")
             return mapping
         except Exception as e:
             logger.error(f"加载设备映射配置失败: {e}")
+            raise
+        
+    def _load_point_metadata(self) -> Dict:
+        """加载点位元数据配置"""
+        try:
+            with open(config.POINT_METADATA_FILE, 'r', encoding='utf-8') as f:
+                mapping = json.load(f)
+            logger.info(f"点位元数据配置加载成功: {config.POINT_METADATA_FILE}")
+            return mapping
+        except Exception as e:
+            logger.error(f"加载点位元数据配置失败: {e}")
             raise
     
     def _load_system_prompt(self) -> str:
@@ -143,7 +157,7 @@ class AIExtractor:
         """
         # 构建数据描述
         data_description = "需要提取的点位的meta data如下所示：\n"
-        for field_name, field_desc in self.dev_mapping.items():
+        for field_name, field_desc in self.point_metadata.items():
             data_description += f"- {field_name}: {field_desc}\n"
         
         prompt = f"""{data_description}
