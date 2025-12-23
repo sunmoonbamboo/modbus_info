@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import json_repair
+from langfuse.openai import openai
 from loguru import logger
-from openai import OpenAI
 
 from src.config import config
 
@@ -35,8 +35,19 @@ class AIExtractor:
         if not self.api_key:
             raise ValueError("API密钥未设置，请在.env文件中配置OPENAI_API_KEY")
         
-        # 初始化OpenAI客户端（通过OpenRouter访问Gemini）
-        self.client = OpenAI(
+        # 配置Langfuse监控
+        if config.LANGFUSE_SECRET_KEY and config.LANGFUSE_PUBLIC_KEY:
+            import os
+            from langfuse.openai import openai
+            os.environ["LANGFUSE_SECRET_KEY"] = config.LANGFUSE_SECRET_KEY
+            os.environ["LANGFUSE_PUBLIC_KEY"] = config.LANGFUSE_PUBLIC_KEY
+            os.environ["LANGFUSE_HOST"] = config.LANGFUSE_HOST
+            logger.info(f"Langfuse监控已启用: {config.LANGFUSE_HOST}")
+        else:
+            logger.warning("Langfuse配置未完整设置，监控功能未启用")
+        
+        # 初始化OpenAI客户端（通过OpenRouter访问Gemini，使用Langfuse包装）
+        self.client = openai.OpenAI(
             api_key=self.api_key,
             base_url=self.base_url
         )
@@ -129,7 +140,7 @@ class AIExtractor:
             完整的用户提示词
         """
         # 构建数据描述
-        data_description = "需要提取的数据字段说明：\n"
+        data_description = "需要提取的点位的meta data如下所示：\n"
         for field_name, field_desc in self.dev_mapping.items():
             data_description += f"- {field_name}: {field_desc}\n"
         

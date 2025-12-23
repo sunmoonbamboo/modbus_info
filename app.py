@@ -456,7 +456,7 @@ def main():
     app = ModbusGradioApp()
     app.launch(
         server_name="0.0.0.0",
-        server_port=7860,
+        server_port=8860,
         share=False,
         show_error=True
     )
