@@ -141,7 +141,7 @@ def run_basic_tests():
         # 测试配置
         logger.info("\n测试配置加载...")
         assert config.PROJECT_ROOT.exists()
-        assert config.DEV_MAPPING_FILE.exists()
+        assert config.POINT_METADATA_FILE.exists()
         logger.info("✓ 配置加载成功")
         
         return True

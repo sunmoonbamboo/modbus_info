@@ -23,47 +23,37 @@ class ModbusGradioApp:
         self.data_src_dir = Path("data/src")
         self.data_src_dir.mkdir(parents=True, exist_ok=True)
         
-        # 加载默认的点位配置
-        self.default_points = self._load_default_points()
+        # 加载默认的配置
+        self.default_dev_mapping = self._load_dev_mapping()
+        self.default_point_metadata = self._load_point_metadata()
         
         logger.info("Gradio应用初始化完成")
     
-    def _load_default_points(self) -> Dict[str, str]:
+    def _load_dev_mapping(self) -> Dict[str, str]:
         """
-        从 config/modbus_extract.md 加载默认的点位配置
+        从 config/dev_mapping.json 加载设备映射配置
         
         Returns:
-            点位配置字典 {描述: 标准编码}
+            设备映射配置字典
         """
         try:
-            extract_file = Path("config/modbus_extract.md")
-            if not extract_file.exists():
-                logger.warning(f"配置文件不存在: {extract_file}")
-                return self._get_fallback_points()
+            mapping_file = Path("config/dev_mapping.json")
+            if not mapping_file.exists():
+                logger.warning(f"配置文件不存在: {mapping_file}")
+                return self._get_fallback_dev_mapping()
             
-            content = extract_file.read_text(encoding='utf-8')
+            with open(mapping_file, 'r', encoding='utf-8') as f:
+                mapping = json.load(f)
             
-            # 解析点位信息（格式：-- 查询冷冻水进水温度采集: SPcoolTwIn）
-            points = {}
-            for line in content.split('\n'):
-                line = line.strip()
-                if line.startswith('--'):
-                    # 移除前导的 '--'
-                    line = line[2:].strip()
-                    # 分割描述和编码
-                    if ':' in line:
-                        desc, code = line.split(':', 1)
-                        points[desc.strip()] = code.strip()
-            
-            logger.info(f"成功加载 {len(points)} 个默认点位配置")
-            return points
+            logger.info(f"成功加载 {len(mapping)} 个设备映射配置")
+            return mapping
             
         except Exception as e:
-            logger.error(f"加载默认点位配置失败: {e}")
-            return self._get_fallback_points()
+            logger.error(f"加载设备映射配置失败: {e}")
+            return self._get_fallback_dev_mapping()
     
-    def _get_fallback_points(self) -> Dict[str, str]:
-        """返回备用的默认点位配置"""
+    def _get_fallback_dev_mapping(self) -> Dict[str, str]:
+        """返回备用的默认设备映射配置"""
         return {
             "查询冷冻水进水温度采集": "SPcoolTwIn",
             "查询冷冻水出水温度采集": "SPcoolTwOut",
@@ -78,6 +68,29 @@ class ModbusGradioApp:
             "冷水温度设定点": "Setcoolpoint",
             "出水温度设定点（没有指定冷水和热水时使用）": "ToutSet"
         }
+    
+    def _load_point_metadata(self) -> Dict[str, str]:
+        """
+        从 config/point_metadata.json 加载点位元数据配置
+        
+        Returns:
+            点位元数据配置字典
+        """
+        try:
+            metadata_file = Path("config/point_metadata.json")
+            if not metadata_file.exists():
+                logger.warning(f"配置文件不存在: {metadata_file}")
+                return {}
+            
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+            
+            logger.info(f"成功加载 {len(metadata)} 个点位元数据配置")
+            return metadata
+            
+        except Exception as e:
+            logger.error(f"加载点位元数据配置失败: {e}")
+            return {}
     
     def upload_pdf(self, file) -> Tuple[str, str]:
         """
@@ -145,7 +158,8 @@ class ModbusGradioApp:
         pdf_path: str,
         controller_name: str,
         address_offset: int,
-        points_config: str,
+        dev_mapping_config: str,
+        metadata_config: str,
         progress=gr.Progress()
     ):
         """
@@ -155,7 +169,8 @@ class ModbusGradioApp:
             pdf_path: PDF文件路径
             controller_name: 控制器名称
             address_offset: 地址偏移量
-            points_config: 点位配置（JSON字符串）
+            dev_mapping_config: 设备映射配置（JSON字符串）
+            metadata_config: 点位元数据配置（JSON字符串）
             progress: Gradio进度条对象
             
         Yields:
@@ -168,25 +183,31 @@ class ModbusGradioApp:
             return
         
         try:
-            # 解析点位配置
+            # 解析配置
             try:
-                points_dict = json.loads(points_config)
-                logger.info(f"使用自定义点位配置: {len(points_dict)} 个点位")
+                dev_mapping_dict = json.loads(dev_mapping_config)
+                logger.info(f"使用设备映射配置: {len(dev_mapping_dict)} 个点位")
             except Exception as e:
-                yield f"❌ 点位配置格式错误: {str(e)}", None, None
+                yield f"❌ 设备映射配置格式错误: {str(e)}", None, None
                 return
             
-            # 更新设备映射配置
-            self._update_dev_mapping(points_dict)
+            try:
+                metadata_dict = json.loads(metadata_config)
+                logger.info(f"使用点位元数据配置: {len(metadata_dict)} 个字段")
+            except Exception as e:
+                yield f"❌ 点位元数据配置格式错误: {str(e)}", None, None
+                return
             
             # 初始化进度
             progress(0, desc="正在初始化...")
             yield "🔄 正在初始化处理流程...\n", None, None
             
-            # 创建Pipeline实例
+            # 创建Pipeline实例（使用当前会话的配置，不写入文件）
             pipeline = ModbusPipeline(
                 controller_name=controller_name,
-                address_offset=address_offset
+                address_offset=address_offset,
+                dev_mapping=dev_mapping_dict,
+                point_metadata=metadata_dict
             )
             
             pdf_file = Path(pdf_path)
@@ -243,33 +264,9 @@ class ModbusGradioApp:
             error_msg = f"❌ 提取失败: {str(e)}\n\n详细信息请查看日志文件"
             yield error_msg, None, None
     
-    def _update_dev_mapping(self, points_dict: Dict[str, str]):
-        """
-        更新设备映射配置文件
-        
-        Args:
-            points_dict: 点位配置字典
-        """
-        try:
-            # 备份原文件
-            mapping_file = Path("config/dev_mapping.json")
-            if mapping_file.exists():
-                backup_file = mapping_file.with_suffix('.json.bak')
-                shutil.copy2(mapping_file, backup_file)
-            
-            # 写入新配置
-            with open(mapping_file, 'w', encoding='utf-8') as f:
-                json.dump(points_dict, f, ensure_ascii=False, indent=2)
-            
-            logger.info(f"设备映射配置已更新: {mapping_file}")
-            
-        except Exception as e:
-            logger.error(f"更新设备映射配置失败: {e}")
-            raise
-    
-    def points_dict_to_json(self, points_dict: Dict[str, str]) -> str:
-        """将点位字典转换为格式化的JSON字符串"""
-        return json.dumps(points_dict, ensure_ascii=False, indent=2)
+    def dict_to_json(self, data_dict: Dict[str, str]) -> str:
+        """将字典转换为格式化的JSON字符串"""
+        return json.dumps(data_dict, ensure_ascii=False, indent=2)
     
     def create_interface(self) -> gr.Blocks:
         """
@@ -329,15 +326,27 @@ class ModbusGradioApp:
                     )
                     
                     gr.Markdown("---")
-                    gr.Markdown("### 3️⃣ 配置点位信息")
-                    gr.Markdown("*格式: {\"描述\": \"标准编码\"}，可以修改、删除或添加点位*")
+                    gr.Markdown("### 3️⃣ 配置点位映射")
+                    gr.Markdown("*格式: {\"描述\": \"标准编码\"}，定义需要提取的点位。修改仅在当前会话生效*")
                     
-                    # 点位配置编辑器
-                    points_config = gr.Code(
-                        label="点位信息配置（JSON格式）",
+                    # 设备映射配置编辑器
+                    dev_mapping_config = gr.Code(
+                        label="设备映射配置（dev_mapping）",
                         language="json",
-                        value=self.points_dict_to_json(self.default_points),
-                        lines=15
+                        value=self.dict_to_json(self.default_dev_mapping),
+                        lines=12
+                    )
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### 4️⃣ 配置点位元数据")
+                    gr.Markdown("*格式: {\"字段名\": \"字段说明\"}，定义提取字段的含义。修改仅在当前会话生效*")
+                    
+                    # 点位元数据配置编辑器
+                    metadata_config = gr.Code(
+                        label="点位元数据配置（point_metadata）",
+                        language="json",
+                        value=self.dict_to_json(self.default_point_metadata),
+                        lines=12
                     )
                     
                     # 提取按钮
@@ -391,7 +400,8 @@ class ModbusGradioApp:
                     pdf_path_state,
                     controller_name,
                     address_offset,
-                    points_config
+                    dev_mapping_config,
+                    metadata_config
                 ],
                 outputs=[
                     process_output,
@@ -413,15 +423,19 @@ class ModbusGradioApp:
             2. **配置参数**: 
                - 控制器名称：必填，用于标识设备
                - 地址偏移量：可选，默认为0，范围[0, 10)
-            3. **配置点位**: 
-               - 默认显示预设的点位配置
-               - 可以修改、删除或添加新的点位
+            3. **配置点位映射（dev_mapping）**: 
+               - 定义需要从PDF中提取的点位
                - 格式为JSON: `{"点位描述": "标准编码"}`
-            4. **开始提取**: 点击"开始提取"按钮，系统将自动：
+               - ⚠️ 修改仅在当前会话生效，不会保存到配置文件
+            4. **配置点位元数据（point_metadata）**: 
+               - 定义提取字段的含义和说明
+               - 格式为JSON: `{"字段名": "字段说明"}`
+               - ⚠️ 修改仅在当前会话生效，不会保存到配置文件
+            5. **开始提取**: 点击"开始提取"按钮，系统将自动：
                - 解析PDF文件
                - 使用AI提取点位信息
                - 生成CSV文件
-            5. **查看结果**: 
+            6. **查看结果**: 
                - 在右侧查看提取过程和结果表格
                - 点击"下载CSV文件"保存结果
             

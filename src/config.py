@@ -29,6 +29,7 @@ class Config:
     
     # 配置文件路径
     DEV_MAPPING_FILE = PROJECT_ROOT / "config" / "dev_mapping.json"
+    POINT_METADATA_FILE = PROJECT_ROOT / "config" / "point_metadata.json"
     EXTRACT_PROMPT_FILE = PROJECT_ROOT / "config" / "modbus_extract.md"
     DEMO_CSV_FILE = DATA_DIR / "demo.csv"
     
@@ -38,8 +39,8 @@ class Config:
         if not cls.OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY 未设置，请在 .env 文件中配置")
         
-        if not cls.DEV_MAPPING_FILE.exists():
-            raise FileNotFoundError(f"设备映射文件不存在: {cls.DEV_MAPPING_FILE}")
+        if not cls.POINT_METADATA_FILE.exists():
+            raise FileNotFoundError(f"设备映射文件不存在: {cls.POINT_METADATA_FILE}")
         
         if not cls.EXTRACT_PROMPT_FILE.exists():
             raise FileNotFoundError(f"提示词文件不存在: {cls.EXTRACT_PROMPT_FILE}")

@@ -76,16 +76,23 @@ class CSVExporter:
         'byteOrder': ''
     }
     
-    def __init__(self, controller_name: str = "default", address_offset: int = 0):
+    def __init__(
+        self, 
+        controller_name: str = "default", 
+        address_offset: int = 0,
+        point_metadata: Optional[Dict[str, str]] = None
+    ):
         """
         初始化CSV导出器
         
         Args:
             controller_name: 控制器名称，默认为'default'
             address_offset: 地址偏移量，默认为0，范围[0, 10)
+            point_metadata: 点位元数据配置，用于字段说明（可选）
         """
         self.controller_name = controller_name
         self.address_offset = address_offset
+        self.point_metadata = point_metadata or {}
         self.default_values = self.DEFAULT_VALUES.copy()
         self.default_values['ControllerName'] = controller_name
     

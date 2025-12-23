@@ -18,7 +18,8 @@ class AIExtractor:
         self,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
-        base_url: Optional[str] = None
+        base_url: Optional[str] = None,
+        dev_mapping: Optional[Dict[str, str]] = None
     ):
         """
         初始化AI提取器
@@ -27,6 +28,7 @@ class AIExtractor:
             api_key: API密钥，默认从配置读取
             model: 模型名称，默认从配置读取
             base_url: API基础URL，默认从配置读取
+            dev_mapping: 设备映射配置，默认从配置文件读取
         """
         self.api_key = api_key or config.OPENAI_API_KEY
         self.model = model or config.MODEL_NAME
@@ -52,8 +54,8 @@ class AIExtractor:
             base_url=self.base_url
         )
         
-        # 加载设备映射配置
-        self.dev_mapping = self._load_dev_mapping()
+        # 加载设备映射配置（如果提供了运行时配置则使用，否则从文件加载）
+        self.dev_mapping = dev_mapping if dev_mapping is not None else self._load_dev_mapping()
         
         # 加载提示词
         self.system_prompt = self._load_system_prompt()
@@ -61,9 +63,9 @@ class AIExtractor:
     def _load_dev_mapping(self) -> Dict:
         """加载设备映射配置"""
         try:
-            with open(config.DEV_MAPPING_FILE, 'r', encoding='utf-8') as f:
+            with open(config.POINT_METADATA_FILE, 'r', encoding='utf-8') as f:
                 mapping = json.load(f)
-            logger.info(f"设备映射配置加载成功: {config.DEV_MAPPING_FILE}")
+            logger.info(f"设备映射配置加载成功: {config.POINT_METADATA_FILE}")
             return mapping
         except Exception as e:
             logger.error(f"加载设备映射配置失败: {e}")
