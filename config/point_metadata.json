@@ -1,5 +1,5 @@
 {
-    "MeasuringPointName": "测量点名称",
+    "MeasuringPointName": "测量点名称, 根据点位的描述进行映射为英文ID",
     "ControllerName": "控制器名称, 默认为: default",
     "GroupName": "组名,固定为: default",
     "UploadType": "上传类型, periodic/onChange",

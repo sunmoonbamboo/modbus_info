@@ -156,11 +156,15 @@ class AIExtractor:
             完整的用户提示词
         """
         # 构建数据描述
-        data_description = "需要提取的点位的meta data如下所示：\n"
+        point_metadata_description = "需要提取的点位的meta data如下所示：\n"
         for field_name, field_desc in self.point_metadata.items():
-            data_description += f"- {field_name}: {field_desc}\n"
+            point_metadata_description += f"- {field_name}: {field_desc}\n"
+            
+        dev_mapping_description = "需要提取的点位: MeasuringPointName 如下所示：\n"
+        for field_name, field_desc in self.dev_mapping.items():
+            dev_mapping_description += f"- {field_name}: {field_desc}\n"
         
-        prompt = f"""{data_description}
+        prompt = f"""{point_metadata_description}
 
 请从以下Modbus协议文档中提取完整的点位信息，以JSON数组格式输出。每个点位包含上述所有字段。
 
@@ -175,15 +179,19 @@ class AIExtractor:
     "MeasuringPointName": "测量点名称",
     "thinking": "思考过程",
     "exist": false or true,
+    "address_range": "地址区间",
     "其它字段": "......"
   }},
   ...
 ]
 ```
 
+{dev_mapping_description}
+
 注意：
-1. 提取所有能找到的点位信息
-2. 只输出JSON数组，不要有其他文字说明
+1. 从说明书中提取上述描述中的点位信息（不存在的点位不输出）
+2. 同一个点位有多个类似的描述时，可以尝试通过分区进行区分；一般情况下控制设定点出现在0区&4区，状态采集点出现在1区&3区
+3. 只输出JSON数组，不要有其他文字说明
 """
         return prompt
     
