@@ -16,6 +16,10 @@ class Config:
     MODEL_NAME = os.getenv("MODEL_NAME", "google/gemini-2.5-pro")
     OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
     
+    # MinerU官方API配置
+    MINERU_API_TOKEN = os.getenv("MINERU_API_TOKEN", "")
+    FILE_SERVER_URL = os.getenv("FILE_SERVER_URL", "")
+    
     # Langfuse配置
     LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
     LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")

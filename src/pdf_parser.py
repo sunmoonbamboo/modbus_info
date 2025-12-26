@@ -2,6 +2,9 @@
 
 import os
 import requests
+import time
+import zipfile
+import io
 from pathlib import Path
 from typing import Optional
 
@@ -18,18 +21,41 @@ from mineru.utils.enum_class import MakeMode
 class PDFParser:
     """PDF解析器，使用MinerU将PDF转换为Markdown文本"""
     
-    def __init__(self, output_dir: Optional[Path] = None, use_web_api: bool = True, api_url: str = "http://127.0.0.1:8000"):
+    def __init__(
+        self, 
+        output_dir: Optional[Path] = None, 
+        use_web_api: bool = True, 
+        api_url: str = "http://127.0.0.1:8000",
+        parse_mode: str = "local_api",  # "local_api", "local", "official_api"
+        official_api_token: Optional[str] = None,
+        file_server_url: Optional[str] = None
+    ):
         """
         初始化PDF解析器
         
         Args:
             output_dir: 输出目录，默认为None时会自动生成
-            use_web_api: 是否使用Web API方式解析，默认为True
+            use_web_api: 是否使用Web API方式解析，默认为True（兼容旧版本）
             api_url: Web API服务地址，默认为http://127.0.0.1:8000
+            parse_mode: 解析模式，可选值：
+                - "local_api": 本地Web API（默认，兼容旧版本）
+                - "local": 本地直接解析
+                - "official_api": MinerU官方API
+            official_api_token: MinerU官方API的Token（仅在parse_mode为official_api时需要）
+            file_server_url: 文件服务器URL（仅在parse_mode为official_api时需要，用于让官方API访问文件）
         """
         self.output_dir = output_dir
         self.use_web_api = use_web_api
         self.api_url = api_url
+        
+        # 新增：解析模式相关
+        self.parse_mode = parse_mode
+        self.official_api_token = official_api_token
+        self.file_server_url = file_server_url
+        
+        # 如果使用旧的参数，自动转换为新的模式
+        if parse_mode == "local_api" and not use_web_api:
+            self.parse_mode = "local"
     
     def parse(
         self,
@@ -56,9 +82,18 @@ class PDFParser:
             raise FileNotFoundError(f"PDF文件不存在: {pdf_path}")
         
         logger.info(f"开始解析PDF文件: {pdf_path}")
+        logger.info(f"解析模式: {self.parse_mode}")
         
-        # 根据配置选择解析方式
-        if self.use_web_api:
+        # 根据解析模式选择方法
+        if self.parse_mode == "official_api":
+            return self._parse_via_official_api(
+                pdf_path=pdf_path,
+                lang=lang,
+                parse_method=parse_method,
+                formula_enable=formula_enable,
+                table_enable=table_enable
+            )
+        elif self.parse_mode == "local_api" or (self.parse_mode == "local_api" and self.use_web_api):
             return self._parse_via_web_api(
                 pdf_path=pdf_path,
                 lang=lang,
@@ -66,7 +101,7 @@ class PDFParser:
                 formula_enable=formula_enable,
                 table_enable=table_enable
             )
-        else:
+        else:  # local
             return self._parse_locally(
                 pdf_path=pdf_path,
                 lang=lang,
@@ -268,6 +303,207 @@ class PDFParser:
             raise RuntimeError(f"Web API请求失败: {e}。请确认服务是否正常运行在 {self.api_url}")
         except Exception as e:
             logger.error(f"Web API解析失败: {e}")
+            raise
+    
+    def _parse_via_official_api(
+        self,
+        pdf_path: Path,
+        lang: str = "ch",
+        parse_method: str = "auto",
+        formula_enable: bool = True,
+        table_enable: bool = True,
+        model_version: str = "vlm",
+        polling_interval: int = 5,
+        max_wait_time: int = 600
+    ) -> str:
+        """
+        通过MinerU官方API解析PDF文件为Markdown文本
+        
+        Args:
+            pdf_path: PDF文件路径
+            lang: 语言，默认为'ch'（中文）
+            parse_method: 解析方法，默认为'auto'
+            formula_enable: 是否启用公式解析
+            table_enable: 是否启用表格解析
+            model_version: 模型版本，默认为'vlm'
+            polling_interval: 轮询间隔（秒），默认为5秒
+            max_wait_time: 最大等待时间（秒），默认为600秒（10分钟）
+            
+        Returns:
+            解析后的Markdown文本字符串
+        """
+        logger.info(f"使用MinerU官方API解析PDF")
+        
+        if not self.official_api_token:
+            raise ValueError("使用官方API模式需要提供API Token，请在初始化时设置 official_api_token 参数")
+        
+        try:
+            # 步骤1: 准备文件URL
+            # 如果提供了file_server_url，则假设文件已经可通过该URL访问
+            # 否则需要用户提供可访问的URL
+            if self.file_server_url:
+                # 构造文件URL
+                file_url = f"{self.file_server_url}/{pdf_path.name}"
+                logger.info(f"使用文件URL: {file_url}")
+            else:
+                # 如果没有文件服务器URL，尝试从pdf_path中提取（假设是完整URL）
+                file_url = str(pdf_path)
+                logger.warning(f"未设置文件服务器URL，使用路径作为URL: {file_url}")
+            
+            # 步骤2: 创建解析任务
+            logger.info("正在创建解析任务...")
+            api_base_url = "https://mineru.net/api/v4/extract"
+            create_task_url = f"{api_base_url}/task"
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.official_api_token}"
+            }
+            
+            task_data = {
+                "url": file_url,
+                "model_version": model_version
+            }
+            
+            logger.info(f"发送请求到: {create_task_url}")
+            logger.info(f"请求数据: {task_data}")
+            
+            response = requests.post(create_task_url, headers=headers, json=task_data, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            logger.info(f"API响应: {result}")
+            
+            # 提取task_id
+            if "data" in result and "task_id" in result["data"]:
+                task_id = result["data"]["task_id"]
+                logger.info(f"✅ 任务创建成功，task_id: {task_id}")
+            else:
+                raise ValueError(f"无法从API响应中获取task_id: {result}")
+            
+            # 步骤3: 轮询任务状态
+            logger.info("正在等待解析完成...")
+            query_task_url = f"{api_base_url}/task/{task_id}"
+            
+            start_time = time.time()
+            while True:
+                # 检查是否超时
+                elapsed_time = time.time() - start_time
+                if elapsed_time > max_wait_time:
+                    raise TimeoutError(f"解析超时（超过{max_wait_time}秒）")
+                
+                # 查询任务状态
+                response = requests.get(query_task_url, headers=headers, timeout=30)
+                response.raise_for_status()
+                
+                result = response.json()
+                
+                if "data" not in result:
+                    raise ValueError(f"API响应格式错误: {result}")
+                
+                data = result["data"]
+                state = data.get("state", "unknown")
+                
+                logger.info(f"任务状态: {state} (已等待 {int(elapsed_time)} 秒)")
+                
+                if state == "done":
+                    # 任务完成
+                    full_zip_url = data.get("full_zip_url")
+                    if not full_zip_url:
+                        raise ValueError(f"任务完成但未获取到下载链接: {data}")
+                    
+                    logger.info(f"✅ 解析完成，下载地址: {full_zip_url}")
+                    
+                    # 步骤4: 下载并解压结果
+                    logger.info("正在下载解析结果...")
+                    zip_response = requests.get(full_zip_url, timeout=120)
+                    zip_response.raise_for_status()
+                    
+                    logger.info(f"下载完成，文件大小: {len(zip_response.content)} 字节")
+                    
+                    # 解压ZIP文件并提取Markdown内容
+                    logger.info("正在解压文件...")
+                    md_content = self._extract_markdown_from_zip(zip_response.content, pdf_path)
+                    
+                    # 保存markdown文件到本地
+                    if self.output_dir is None:
+                        self.output_dir = pdf_path.parent / "output"
+                    
+                    self.output_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    file_name = pdf_path.stem
+                    md_file_path = self.output_dir / file_name / "auto" / f"{file_name}.md"
+                    md_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    md_file_path.write_text(md_content, encoding='utf-8')
+                    
+                    logger.info(f"PDF解析完成（官方API），Markdown文件保存至: {md_file_path}")
+                    logger.info(f"Markdown文本长度: {len(md_content)} 字符")
+                    
+                    return md_content
+                    
+                elif state == "failed":
+                    # 任务失败
+                    err_msg = data.get("err_msg", "未知错误")
+                    raise RuntimeError(f"解析任务失败: {err_msg}")
+                    
+                elif state in ["pending", "running"]:
+                    # 任务进行中，继续等待
+                    logger.info(f"任务{state}，{polling_interval}秒后重试...")
+                    time.sleep(polling_interval)
+                    
+                else:
+                    # 未知状态
+                    logger.warning(f"未知任务状态: {state}")
+                    time.sleep(polling_interval)
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"官方API请求失败: {e}")
+            raise RuntimeError(f"官方API请求失败: {e}")
+        except Exception as e:
+            logger.error(f"官方API解析失败: {e}")
+            raise
+    
+    def _extract_markdown_from_zip(self, zip_content: bytes, pdf_path: Path) -> str:
+        """
+        从ZIP文件中提取Markdown内容
+        
+        Args:
+            zip_content: ZIP文件的字节内容
+            pdf_path: 原始PDF文件路径（用于确定文件名）
+            
+        Returns:
+            Markdown文本内容
+        """
+        logger.info("正在从ZIP文件中提取Markdown内容...")
+        
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_content)) as zip_file:
+                # 列出ZIP中的所有文件
+                file_list = zip_file.namelist()
+                logger.info(f"ZIP文件包含 {len(file_list)} 个文件")
+                
+                # 查找markdown文件（通常是.md文件）
+                md_files = [f for f in file_list if f.endswith('.md')]
+                
+                if not md_files:
+                    raise ValueError(f"ZIP文件中未找到Markdown文件。文件列表: {file_list}")
+                
+                # 使用第一个找到的markdown文件
+                md_file_name = md_files[0]
+                logger.info(f"找到Markdown文件: {md_file_name}")
+                
+                # 读取markdown内容
+                with zip_file.open(md_file_name) as md_file:
+                    md_content = md_file.read().decode('utf-8')
+                
+                logger.info(f"✅ 成功提取Markdown内容，长度: {len(md_content)} 字符")
+                return md_content
+                
+        except zipfile.BadZipFile as e:
+            logger.error(f"无效的ZIP文件: {e}")
+            raise ValueError(f"下载的文件不是有效的ZIP文件")
+        except Exception as e:
+            logger.error(f"解压ZIP文件失败: {e}")
             raise
     
     def _parse_locally(

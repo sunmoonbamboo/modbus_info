@@ -196,7 +196,7 @@ class ModbusGradioApp:
         address_offset: int,
         dev_mapping_config: str,
         metadata_config: str,
-        use_web_api: bool,
+        parse_mode: str,
         api_url: str,
         progress=gr.Progress()
     ):
@@ -209,7 +209,7 @@ class ModbusGradioApp:
             address_offset: 地址偏移量
             dev_mapping_config: 设备映射配置（JSON字符串）
             metadata_config: 点位元数据配置（JSON字符串）
-            use_web_api: 是否使用Web API方式解析PDF
+            parse_mode: 解析模式（local_api/local/official_api）
             api_url: Web API服务地址
             progress: Gradio进度条对象
             
@@ -240,8 +240,33 @@ class ModbusGradioApp:
             
             # 初始化进度
             progress(0, desc="正在初始化...")
-            parse_mode = "Web API" if use_web_api else "本地"
-            yield f"🔄 正在初始化处理流程... (解析方式: {parse_mode})\n", None, None
+            
+            # 解析模式名称映射
+            mode_names = {
+                "local_api": "本地Web API",
+                "local": "本地直接解析",
+                "official_api": "MinerU官方API"
+            }
+            mode_name = mode_names.get(parse_mode, parse_mode)
+            yield f"🔄 正在初始化处理流程... (解析方式: {mode_name})\n", None, None
+            
+            # 如果使用官方API，从环境变量读取配置
+            official_api_token = None
+            file_server_url = None
+            if parse_mode == "official_api":
+                from src.config import config
+                official_api_token = config.MINERU_API_TOKEN
+                file_server_url = config.FILE_SERVER_URL
+                
+                # 检查是否配置了必要的参数
+                if not official_api_token:
+                    yield "❌ 错误: 未配置 MINERU_API_TOKEN\n请在 .env 文件中设置 MINERU_API_TOKEN=your_token_here", None, None
+                    return
+                
+                if not file_server_url:
+                    logger.warning("未配置 FILE_SERVER_URL，将使用本地文件路径（可能无法正常工作）")
+                
+                logger.info(f"使用官方API配置 - Token: {'已配置' if official_api_token else '未配置'}, 文件服务器: {file_server_url or '未配置'}")
             
             # 创建Pipeline实例（使用当前会话的配置，不写入文件）
             pipeline = ModbusPipeline(
@@ -249,8 +274,11 @@ class ModbusGradioApp:
                 address_offset=address_offset,
                 dev_mapping=dev_mapping_dict,
                 point_metadata=metadata_dict,
-                use_web_api=use_web_api,
-                api_url=api_url
+                use_web_api=(parse_mode == "local_api"),
+                api_url=api_url,
+                parse_mode=parse_mode,
+                official_api_token=official_api_token,
+                file_server_url=file_server_url
             )
             
             pdf_file = Path(pdf_path)
@@ -393,23 +421,31 @@ class ModbusGradioApp:
                     # PDF解析方式配置
                     gr.Markdown("### 3️⃣ PDF解析方式")
                     with gr.Row():
-                        use_web_api = gr.Radio(
+                        parse_mode = gr.Radio(
                             label="解析方式",
                             choices=[
-                                ("Web API（推荐，更快）", True),
-                                ("本地解析（需要GPU）", False)
+                                 ("MinerU官方API)", "official_api"),
+                                ("本地Web API（需启动本地服务）", "local_api")                               
                             ],
-                            value=True,
+                            value="official_api",
                             info="选择PDF解析的方式"
                         )
                     
-                    with gr.Row():
-                        api_url = gr.Textbox(
-                            label="Web API 地址",
-                            value="http://127.0.0.1:8000",
-                            placeholder="请输入Web API服务地址",
-                            info="仅在使用Web API方式时有效"
-                        )
+                    with gr.Accordion("⚙️ API配置", open=False):
+                        gr.Markdown("""
+                        **配置说明:**
+                        - **本地Web API**: 需要在下方配置本地服务地址
+                        - **MinerU官方API**: 自动从 `.env` 文件读取 `MINERU_API_TOKEN` 和 `FILE_SERVER_URL`
+                        - **本地直接解析**: 无需配置
+                        """)
+                        
+                        with gr.Row():
+                            api_url = gr.Textbox(
+                                label="本地Web API 地址",
+                                value="http://127.0.0.1:8000",
+                                placeholder="请输入本地Web API服务地址",
+                                info="仅在使用本地Web API方式时有效"
+                            )
                     
                     # 高级配置（可折叠）
                     gr.Markdown("### 4️⃣ 高级配置（可选）")
@@ -527,7 +563,7 @@ class ModbusGradioApp:
                     address_offset,
                     dev_mapping_config,
                     metadata_config,
-                    use_web_api,
+                    parse_mode,
                     api_url
                 ],
                 outputs=[
@@ -549,20 +585,36 @@ class ModbusGradioApp:
                 1. **上传文件**: 选择Modbus协议的PDF文件（仅支持PDF格式）
                 2. **配置参数**: 填写控制器名称（必填）和地址偏移量（可选）
                 3. **选择解析方式**: 
-                   - **Web API（推荐）**: 需要先启动解析服务，速度更快
-                   - **本地解析**: 直接在本地解析，需要GPU支持
-                4. **开始提取**: 点击"🚀 开始提取"按钮
-                5. **查看结果**: 在右侧的"提取过程"和"数据预览"标签页中查看结果
-                6. **下载文件**: 提取完成后点击"📥 下载CSV文件"保存结果
+                   - **本地Web API（推荐）**: 需要先启动解析服务，速度更快
+                   - **MinerU官方API**: 云端解析，自动从 `.env` 读取配置
+                   - **本地直接解析**: 直接在本地解析，需要GPU支持
+                4. **配置API**: 根据选择的解析方式配置相应参数
+                5. **开始提取**: 点击"🚀 开始提取"按钮
+                6. **查看结果**: 在右侧的"提取过程"和"数据预览"标签页中查看结果
+                7. **下载文件**: 提取完成后点击"📥 下载CSV文件"保存结果
                 
-                ### PDF解析方式
+                ### PDF解析方式详解
                 
-                - **Web API方式**（推荐）: 
+                - **本地Web API方式**（推荐）: 
                   - 需要先启动解析服务: `uv run python -m mineru.server --host 0.0.0.0 --port 8000`
                   - 解析速度更快，支持分布式部署
                   - 默认地址: http://127.0.0.1:8000
+                  - 适合本地有GPU的情况
                 
-                - **本地解析方式**: 
+                - **MinerU官方API方式**（新增）: 
+                  - 使用MinerU官方云端服务进行解析
+                  - **配置方式**: 在项目根目录的 `.env` 文件中配置
+                    ```bash
+                    MINERU_API_TOKEN=your_token_here
+                    FILE_SERVER_URL=http://localhost:8080
+                    ```
+                  - 需要先启动文件服务器: `uv run python start_file_server.py`
+                  - 在 https://mineru.net 申请API Token
+                  - 每天享有2000页免费额度
+                  - 适合没有GPU或需要快速解析的情况
+                  - ⚠️ 注意：配置完 `.env` 后需重启应用
+                
+                - **本地直接解析方式**: 
                   - 直接在本地运行MinerU进行解析
                   - 需要GPU支持，速度较慢
                   - 无需额外服务
