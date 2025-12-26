@@ -7,7 +7,7 @@ echo.
 echo 正在启动 Gradio 界面...
 echo.
 echo 启动后浏览器会自动打开，或手动访问：
-echo http://localhost:7860
+echo http://localhost:8860
 echo.
 echo 按 Ctrl+C 可以停止服务
 echo ========================================

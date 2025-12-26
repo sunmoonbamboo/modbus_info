@@ -23,20 +23,18 @@ def check_dependencies():
     logger.info("\n检查依赖包...")
     
     required_packages = {
-        'magic_pdf': 'magic-pdf',
         'loguru': 'loguru',
         'openai': 'openai',
         'dotenv': 'python-dotenv',
         'pandas': 'pandas',
+        'requests': 'requests',
+        'gradio': 'gradio',
     }
     
     all_ok = True
     for module_name, package_name in required_packages.items():
         try:
-            if module_name == 'magic_pdf':
-                import mineru
-                logger.info(f"✓ {package_name} 已安装")
-            elif module_name == 'dotenv':
+            if module_name == 'dotenv':
                 from dotenv import load_dotenv
                 logger.info(f"✓ {package_name} 已安装")
             else:
@@ -45,6 +43,14 @@ def check_dependencies():
         except ImportError:
             logger.error(f"✗ {package_name} 未安装")
             all_ok = False
+    
+    # 可选依赖检查（仅用于本地Web API模式）
+    logger.info("\n检查可选依赖（仅本地Web API模式需要）...")
+    try:
+        import mineru
+        logger.info("✓ mineru 已安装（可使用本地Web API模式）")
+    except ImportError:
+        logger.warning("⚠ mineru 未安装（如使用官方API模式则无需安装）")
     
     return all_ok
 

@@ -41,7 +41,6 @@ class ModbusPipeline:
             api_url: Web API服务地址，默认为http://127.0.0.1:8000
             parse_mode: 解析模式，可选值：
                 - "local_api": 本地Web API（默认）
-                - "local": 本地直接解析
                 - "official_api": MinerU官方API
             official_api_token: MinerU官方API的Token（仅在parse_mode为official_api时需要）
             file_server_url: 文件服务器URL（仅在parse_mode为official_api时需要）
@@ -72,7 +71,6 @@ class ModbusPipeline:
         # 根据parse_mode显示不同的日志
         mode_names = {
             "local_api": "本地Web API",
-            "local": "本地直接解析",
             "official_api": "MinerU官方API"
         }
         mode_name = mode_names.get(parse_mode, parse_mode)

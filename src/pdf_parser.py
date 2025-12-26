@@ -1,6 +1,5 @@
 """PDF解析模块 - 使用MinerU提取PDF内容为Markdown格式"""
 
-import os
 import requests
 import time
 import zipfile
@@ -9,13 +8,6 @@ from pathlib import Path
 from typing import Optional
 
 from loguru import logger
-
-from mineru.cli.common import convert_pdf_bytes_to_bytes_by_pypdfium2, prepare_env, read_fn
-from mineru.data.data_reader_writer import FileBasedDataWriter
-from mineru.backend.pipeline.pipeline_analyze import doc_analyze as pipeline_doc_analyze
-from mineru.backend.pipeline.pipeline_middle_json_mkcontent import union_make as pipeline_union_make
-from mineru.backend.pipeline.model_json_to_middle_json import result_to_middle_json as pipeline_result_to_middle_json
-from mineru.utils.enum_class import MakeMode
 
 
 class PDFParser:
@@ -26,7 +18,7 @@ class PDFParser:
         output_dir: Optional[Path] = None, 
         use_web_api: bool = True, 
         api_url: str = "http://127.0.0.1:8000",
-        parse_mode: str = "local_api",  # "local_api", "local", "official_api"
+        parse_mode: str = "local_api",  # "local_api", "official_api"
         official_api_token: Optional[str] = None,
         file_server_url: Optional[str] = None
     ):
@@ -38,8 +30,7 @@ class PDFParser:
             use_web_api: 是否使用Web API方式解析，默认为True（兼容旧版本）
             api_url: Web API服务地址，默认为http://127.0.0.1:8000
             parse_mode: 解析模式，可选值：
-                - "local_api": 本地Web API（默认，兼容旧版本）
-                - "local": 本地直接解析
+                - "local_api": 本地Web API（默认）
                 - "official_api": MinerU官方API
             official_api_token: MinerU官方API的Token（仅在parse_mode为official_api时需要）
             file_server_url: 文件服务器URL（仅在parse_mode为official_api时需要，用于让官方API访问文件）
@@ -48,14 +39,10 @@ class PDFParser:
         self.use_web_api = use_web_api
         self.api_url = api_url
         
-        # 新增：解析模式相关
+        # 解析模式相关
         self.parse_mode = parse_mode
         self.official_api_token = official_api_token
         self.file_server_url = file_server_url
-        
-        # 如果使用旧的参数，自动转换为新的模式
-        if parse_mode == "local_api" and not use_web_api:
-            self.parse_mode = "local"
     
     def parse(
         self,
@@ -93,7 +80,7 @@ class PDFParser:
                 formula_enable=formula_enable,
                 table_enable=table_enable
             )
-        elif self.parse_mode == "local_api" or (self.parse_mode == "local_api" and self.use_web_api):
+        elif self.parse_mode == "local_api":
             return self._parse_via_web_api(
                 pdf_path=pdf_path,
                 lang=lang,
@@ -101,14 +88,8 @@ class PDFParser:
                 formula_enable=formula_enable,
                 table_enable=table_enable
             )
-        else:  # local
-            return self._parse_locally(
-                pdf_path=pdf_path,
-                lang=lang,
-                parse_method=parse_method,
-                formula_enable=formula_enable,
-                table_enable=table_enable
-            )
+        else:
+            raise ValueError(f"不支持的解析模式: {self.parse_mode}，仅支持 'local_api' 和 'official_api'")
     
     def _parse_via_web_api(
         self,
@@ -505,87 +486,6 @@ class PDFParser:
         except Exception as e:
             logger.error(f"解压ZIP文件失败: {e}")
             raise
-    
-    def _parse_locally(
-        self,
-        pdf_path: Path,
-        lang: str = "ch",
-        parse_method: str = "auto",
-        formula_enable: bool = True,
-        table_enable: bool = True,
-    ) -> str:
-        """
-        本地解析PDF文件为Markdown文本
-        
-        Args:
-            pdf_path: PDF文件路径
-            lang: 语言，默认为'ch'（中文）
-            parse_method: 解析方法，默认为'auto'
-            formula_enable: 是否启用公式解析
-            table_enable: 是否启用表格解析
-            
-        Returns:
-            解析后的Markdown文本字符串
-        """
-        logger.info("使用本地方式解析PDF")
-        
-        # 读取PDF文件
-        pdf_bytes = read_fn(pdf_path)
-        file_name = pdf_path.stem
-        
-        # 设置输出目录
-        if self.output_dir is None:
-            self.output_dir = pdf_path.parent / "output"
-        
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 转换PDF字节
-        new_pdf_bytes = convert_pdf_bytes_to_bytes_by_pypdfium2(pdf_bytes, 0, None)
-        
-        # 使用pipeline模式分析PDF
-        logger.info("使用pipeline模式分析PDF内容...")
-        infer_results, all_image_lists, all_pdf_docs, lang_list, ocr_enabled_list = pipeline_doc_analyze(
-            [new_pdf_bytes],
-            [lang],
-            parse_method=parse_method,
-            formula_enable=formula_enable,
-            table_enable=table_enable
-        )
-        
-        # 处理第一个（也是唯一一个）PDF的结果
-        model_list = infer_results[0]
-        images_list = all_image_lists[0]
-        pdf_doc = all_pdf_docs[0]
-        _lang = lang_list[0]
-        _ocr_enable = ocr_enabled_list[0]
-        
-        # 准备输出环境
-        local_image_dir, local_md_dir = prepare_env(str(self.output_dir), file_name, parse_method)
-        image_writer = FileBasedDataWriter(local_image_dir)
-        
-        # 转换为中间JSON格式
-        logger.info("转换为中间格式...")
-        middle_json = pipeline_result_to_middle_json(
-            model_list, images_list, pdf_doc, image_writer,
-            _lang, _ocr_enable, formula_enable
-        )
-        
-        pdf_info = middle_json["pdf_info"]
-        image_dir = str(os.path.basename(local_image_dir))
-        
-        # 生成Markdown内容
-        logger.info("生成Markdown文本...")
-        md_content_str = pipeline_union_make(pdf_info, MakeMode.MM_MD, image_dir)
-        
-        # 保存Markdown文件（可选）
-        md_file_path = Path(local_md_dir) / f"{file_name}.md"
-        md_writer = FileBasedDataWriter(local_md_dir)
-        md_writer.write_string(f"{file_name}.md", md_content_str)
-        
-        logger.info(f"PDF解析完成（本地），Markdown文件保存至: {md_file_path}")
-        logger.info(f"Markdown文本长度: {len(md_content_str)} 字符")
-        
-        return md_content_str
     
     def parse_to_file(
         self,

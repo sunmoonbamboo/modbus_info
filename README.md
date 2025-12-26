@@ -4,7 +4,9 @@
 
 ## 功能特性
 
-- 📄 **PDF解析**：使用MinerU自动解析PDF文档，支持复杂的表格和格式
+- 📄 **PDF解析**：支持两种解析方式
+  - 🌐 MinerU官方API（云端解析，推荐）
+  - 🖥️ 本地Web API（需要本地服务）
 - 🤖 **AI提取**：通过OpenRouter使用Gemini 2.5 Pro模型智能提取Modbus点位信息
 - 📊 **CSV导出**：标准化的CSV格式输出，方便导入其他系统
 - 🔄 **批量处理**：支持批量处理多个PDF文件
@@ -22,12 +24,47 @@ pip install uv
 
 # 安装项目依赖
 uv sync
+```
 
-# 单独安装 MinerU（PDF解析引擎）
+### 2. 配置PDF解析方式
+
+项目支持两种PDF解析方式：
+
+#### 方式1：MinerU官方API（推荐）
+
+- 无需本地安装GPU或复杂环境
+- 每天享有2000页免费额度
+- 需要申请API Token：https://mineru.net
+
+配置步骤：
+1. 在 `.env` 文件中添加：
+```
+MINERU_API_TOKEN=your_token_here
+FILE_SERVER_URL=http://localhost:8080
+```
+
+2. 启动文件服务器（用于让官方API访问本地文件）：
+```bash
+uv run python start_file_server.py
+```
+
+#### 方式2：本地Web API
+
+- 需要本地GPU环境
+- 需要单独安装MinerU并启动服务
+
+配置步骤：
+1. 安装MinerU：
+```bash
 uv pip install "mineru[core]"
 ```
 
-### 2. 配置API密钥
+2. 启动本地解析服务：
+```bash
+uv run python -m mineru.server --host 0.0.0.0 --port 8000
+```
+
+### 3. 配置API密钥
 
 复制配置文件模板并填入你的 OpenRouter API 密钥：
 
@@ -41,11 +78,16 @@ copy config.example .env
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
 MODEL_NAME="google/gemini-2.5-pro"
 OPENAI_API_KEY=your_api_key_here
+
+# PDF解析方式（可选）
+MINERU_API_TOKEN=your_mineru_token_here  # 使用官方API时需要
+FILE_SERVER_URL=http://localhost:8080     # 使用官方API时需要
 ```
 
-> 获取API密钥：https://openrouter.ai/keys
+> 获取OpenRouter API密钥：https://openrouter.ai/keys
+> 获取MinerU API Token：https://mineru.net
 
-### 3. 使用方法
+### 4. 使用方法
 
 #### 单文件处理（使用已有的Markdown文件）
 
@@ -179,11 +221,14 @@ uv run pytest -m "not integration"
 
 主要依赖：
 
-- `mineru[core]`: PDF解析（需要单独安装）
+- `requests`: HTTP客户端（用于调用PDF解析API）
 - `openai`: API客户端（兼容Gemini）
 - `pandas`: 数据处理
 - `loguru`: 日志记录
 - `python-dotenv`: 环境变量管理
+- `gradio`: Web UI界面
+
+> 注意：不再需要本地安装完整的 MinerU，除非使用本地Web API方式
 
 ## 常见问题
 

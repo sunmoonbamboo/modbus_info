@@ -10,10 +10,11 @@
 
 ### 1. 核心功能
 
-#### 新增解析模式
-- ✅ 本地Web API（原有功能）
-- ✅ 本地直接解析（原有功能）
-- 🆕 **MinerU官方API**（新增）
+#### 支持的解析模式
+- ✅ 本地Web API
+- ✅ **MinerU官方API**
+
+> **注意**: 已移除本地直接解析模式，不再需要本地安装完整的MinerU核心依赖
 
 ### 2. 文件修改
 
@@ -71,17 +72,16 @@ def __init__(
 
 **主要变更**:
 ```python
-# 新增UI组件
+# UI组件
 parse_mode = gr.Radio(
     choices=[
-        ("本地Web API", "local_api"),
-        ("MinerU官方API", "official_api"),  # 新增
-        ("本地直接解析", "local")
+        ("MinerU官方API", "official_api"),
+        ("本地Web API", "local_api")
     ]
 )
-official_api_token = gr.Textbox(type="password")  # 新增
-file_server_url = gr.Textbox()  # 新增
 ```
+
+> 已移除本地直接解析选项
 
 #### 2.4 `src/config.py`
 
@@ -165,7 +165,7 @@ markdown = parser.parse(Path("data/src/your_file.pdf"))
 
 ## 📊 功能对比
 
-| 特性 | 本地Web API | 官方API | 本地直接解析 |
+| 特性 | 本地Web API | 官方API |
 |------|-------------|---------|--------------|
 | 需要GPU | ✅ 是 | ❌ 否 | ✅ 是 |
 | 需要网络 | ❌ 否 | ✅ 是 | ❌ 否 |

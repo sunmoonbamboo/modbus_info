@@ -209,7 +209,7 @@ class ModbusGradioApp:
             address_offset: 地址偏移量
             dev_mapping_config: 设备映射配置（JSON字符串）
             metadata_config: 点位元数据配置（JSON字符串）
-            parse_mode: 解析模式（local_api/local/official_api）
+            parse_mode: 解析模式（local_api/official_api）
             api_url: Web API服务地址
             progress: Gradio进度条对象
             
@@ -244,7 +244,6 @@ class ModbusGradioApp:
             # 解析模式名称映射
             mode_names = {
                 "local_api": "本地Web API",
-                "local": "本地直接解析",
                 "official_api": "MinerU官方API"
             }
             mode_name = mode_names.get(parse_mode, parse_mode)
@@ -424,8 +423,8 @@ class ModbusGradioApp:
                         parse_mode = gr.Radio(
                             label="解析方式",
                             choices=[
-                                 ("MinerU官方API)", "official_api"),
-                                ("本地Web API（需启动本地服务）", "local_api")                               
+                                ("MinerU官方API", "official_api"),
+                                ("本地Web API（需启动本地服务）", "local_api")
                             ],
                             value="official_api",
                             info="选择PDF解析的方式"
@@ -436,7 +435,6 @@ class ModbusGradioApp:
                         **配置说明:**
                         - **本地Web API**: 需要在下方配置本地服务地址
                         - **MinerU官方API**: 自动从 `.env` 文件读取 `MINERU_API_TOKEN` 和 `FILE_SERVER_URL`
-                        - **本地直接解析**: 无需配置
                         """)
                         
                         with gr.Row():
@@ -585,9 +583,8 @@ class ModbusGradioApp:
                 1. **上传文件**: 选择Modbus协议的PDF文件（仅支持PDF格式）
                 2. **配置参数**: 填写控制器名称（必填）和地址偏移量（可选）
                 3. **选择解析方式**: 
-                   - **本地Web API（推荐）**: 需要先启动解析服务，速度更快
+                   - **本地Web API**: 需要先启动解析服务，速度更快
                    - **MinerU官方API**: 云端解析，自动从 `.env` 读取配置
-                   - **本地直接解析**: 直接在本地解析，需要GPU支持
                 4. **配置API**: 根据选择的解析方式配置相应参数
                 5. **开始提取**: 点击"🚀 开始提取"按钮
                 6. **查看结果**: 在右侧的"提取过程"和"数据预览"标签页中查看结果
@@ -613,11 +610,6 @@ class ModbusGradioApp:
                   - 每天享有2000页免费额度
                   - 适合没有GPU或需要快速解析的情况
                   - ⚠️ 注意：配置完 `.env` 后需重启应用
-                
-                - **本地直接解析方式**: 
-                  - 直接在本地运行MinerU进行解析
-                  - 需要GPU支持，速度较慢
-                  - 无需额外服务
                 
                 ### 高级配置（可选）
                 
