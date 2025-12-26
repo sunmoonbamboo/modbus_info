@@ -27,7 +27,12 @@ class ModbusGradioApp:
         self.default_dev_mapping = self._load_dev_mapping()
         self.default_point_metadata = self._load_point_metadata()
         
+        # 加载新的多套配置（如果存在）
+        self.dev_mapping_new = self._load_dev_mapping_new()
+        self.available_device_types = list(self.dev_mapping_new.keys()) if self.dev_mapping_new else []
+        
         logger.info("Gradio应用初始化完成")
+        logger.info(f"可用设备类型: {self.available_device_types}")
     
     def _load_dev_mapping(self) -> Dict[str, str]:
         """
@@ -51,6 +56,37 @@ class ModbusGradioApp:
         except Exception as e:
             logger.error(f"加载设备映射配置失败: {e}")
             return self._get_fallback_dev_mapping()
+    
+    def _load_dev_mapping_new(self) -> Dict[str, Dict[str, str]]:
+        """
+        从 config/dev_mapping_new.json 加载多套设备映射配置
+        
+        Returns:
+            设备映射配置字典，格式: {"设备类型": {"描述": "编码", ...}, ...}
+        """
+        try:
+            mapping_file = Path("config/dev_mapping_new.json")
+            if not mapping_file.exists():
+                logger.warning(f"多套配置文件不存在: {mapping_file}，将使用默认配置")
+                return {}
+            
+            with open(mapping_file, 'r', encoding='utf-8') as f:
+                mapping = json.load(f)
+            
+            # 验证格式是否正确（应该是嵌套字典）
+            if not isinstance(mapping, dict):
+                logger.error(f"配置文件格式错误，应该是字典类型")
+                return {}
+            
+            # 统计配置数量
+            total_points = sum(len(v) if isinstance(v, dict) else 0 for v in mapping.values())
+            logger.info(f"成功加载多套配置: {len(mapping)} 个设备类型，共 {total_points} 个点位")
+            
+            return mapping
+            
+        except Exception as e:
+            logger.error(f"加载多套设备映射配置失败: {e}")
+            return {}
     
     def _get_fallback_dev_mapping(self) -> Dict[str, str]:
         """返回备用的默认设备映射配置"""
@@ -275,6 +311,28 @@ class ModbusGradioApp:
         """将字典转换为格式化的JSON字符串"""
         return json.dumps(data_dict, ensure_ascii=False, indent=2)
     
+    def get_device_mapping(self, device_type: str) -> str:
+        """
+        根据设备类型获取对应的映射配置
+        
+        Args:
+            device_type: 设备类型名称
+            
+        Returns:
+            格式化的JSON字符串
+        """
+        if not device_type or device_type == "默认配置":
+            # 使用默认配置
+            return self.dict_to_json(self.default_dev_mapping)
+        
+        # 从多套配置中获取
+        if device_type in self.dev_mapping_new:
+            return self.dict_to_json(self.dev_mapping_new[device_type])
+        
+        # 如果找不到，返回默认配置
+        logger.warning(f"未找到设备类型 '{device_type}' 的配置，使用默认配置")
+        return self.dict_to_json(self.default_dev_mapping)
+    
     def create_interface(self) -> gr.Blocks:
         """
         创建Gradio界面
@@ -361,11 +419,29 @@ class ModbusGradioApp:
                         with gr.Tabs():
                             with gr.Tab("📝 点位映射 (dev_mapping)"):
                                 gr.Markdown("*定义需要提取的点位。格式: {\"描述\": \"标准编码\"}*")
+                                
+                                # 设备类型选择器
+                                with gr.Row():
+                                    device_type_selector = gr.Dropdown(
+                                        label="🏭 选择设备类型",
+                                        choices=["默认配置"] + self.available_device_types,
+                                        value="默认配置" if not self.available_device_types else self.available_device_types[0],
+                                        info="选择要使用的设备配置方案",
+                                        scale=3
+                                    )
+                                    refresh_config_btn = gr.Button(
+                                        "🔄 刷新配置",
+                                        size="sm",
+                                        scale=1
+                                    )
+                                
                                 # 设备映射配置编辑器
                                 dev_mapping_config = gr.Code(
                                     label="",
                                     language="json",
-                                    value=self.dict_to_json(self.default_dev_mapping),
+                                    value=self.get_device_mapping(
+                                        self.available_device_types[0] if self.available_device_types else "默认配置"
+                                    ),
                                     lines=8
                                 )
                             
@@ -420,6 +496,20 @@ class ModbusGradioApp:
                     )
             
             # 事件处理
+            
+            # 设备类型选择事件
+            device_type_selector.change(
+                fn=self.get_device_mapping,
+                inputs=[device_type_selector],
+                outputs=[dev_mapping_config]
+            )
+            
+            # 刷新配置按钮事件
+            refresh_config_btn.click(
+                fn=self.get_device_mapping,
+                inputs=[device_type_selector],
+                outputs=[dev_mapping_config]
+            )
             
             # 文件上传事件
             pdf_upload.upload(
@@ -479,8 +569,20 @@ class ModbusGradioApp:
                 
                 ### 高级配置（可选）
                 
-                - **点位映射（dev_mapping）**: 定义需要从PDF中提取的点位，格式为 `{"点位描述": "标准编码"}`
-                - **元数据（point_metadata）**: 定义提取字段的含义和说明，格式为 `{"字段名": "字段说明"}`
+                - **设备类型选择**: 
+                  - 支持多套预定义配置（冷机、空气源热泵等）
+                  - 可以在下拉菜单中选择不同的设备类型
+                  - 配置文件: `config/dev_mapping_new.json`
+                
+                - **点位映射（dev_mapping）**: 
+                  - 定义需要从PDF中提取的点位
+                  - 格式: `{"点位描述": "标准编码"}`
+                  - 可以手动编辑或选择预定义配置
+                
+                - **元数据（point_metadata）**: 
+                  - 定义提取字段的含义和说明
+                  - 格式: `{"字段名": "字段说明"}`
+                
                 - ⚠️ **注意**: 配置修改仅在当前会话生效，不会保存到配置文件
                 
                 ### 系统流程
