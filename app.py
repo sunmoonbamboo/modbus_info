@@ -32,8 +32,13 @@ class ModbusGradioApp:
         self.dev_mapping_new = self._load_dev_mapping_new()
         self.available_device_types = list(self.dev_mapping_new.keys()) if self.dev_mapping_new else []
         
+        # 加载鉴权配置
+        self.auth_config_path = Path("config/auth.json")
+        self.auth_config = self._load_auth_config()
+        
         logger.info("Gradio应用初始化完成")
         logger.info(f"可用设备类型: {self.available_device_types}")
+        logger.info(f"鉴权功能: {'启用' if self.auth_config.get('enabled', False) else '禁用'}")
     
     def _load_dev_mapping(self) -> Dict[str, str]:
         """
@@ -128,6 +133,66 @@ class ModbusGradioApp:
         except Exception as e:
             logger.error(f"加载点位元数据配置失败: {e}")
             return {}
+    
+    def _load_auth_config(self) -> Dict:
+        """
+        从 config/auth.json 加载鉴权配置
+        
+        Returns:
+            鉴权配置字典
+        """
+        try:
+            if not self.auth_config_path.exists():
+                logger.warning(f"鉴权配置文件不存在: {self.auth_config_path}，将禁用鉴权")
+                return {"enabled": False, "users": {}}
+            
+            with open(self.auth_config_path, 'r', encoding='utf-8') as f:
+                auth_config = json.load(f)
+            
+            enabled = auth_config.get("enabled", False)
+            users_count = len(auth_config.get("users", {}))
+            
+            logger.info(f"成功加载鉴权配置 - 状态: {'启用' if enabled else '禁用'}, 用户数: {users_count}")
+            return auth_config
+            
+        except Exception as e:
+            logger.error(f"加载鉴权配置失败: {e}")
+            return {"enabled": False, "users": {}}
+    
+    def _reload_auth_config(self):
+        """动态重载鉴权配置"""
+        try:
+            self.auth_config = self._load_auth_config()
+            logger.info("鉴权配置已重新加载")
+        except Exception as e:
+            logger.error(f"重新加载鉴权配置失败: {e}")
+    
+    def _validate_credentials(self, username: str, password: str) -> bool:
+        """
+        验证用户凭证
+        
+        Args:
+            username: 用户名
+            password: 密码
+            
+        Returns:
+            验证是否通过
+        """
+        # 每次验证时重新加载配置，支持动态添加用户
+        self._reload_auth_config()
+        
+        # 如果鉴权未启用，直接通过
+        if not self.auth_config.get("enabled", False):
+            return True
+        
+        # 验证用户名和密码
+        users = self.auth_config.get("users", {})
+        if username in users and users[username] == password:
+            logger.info(f"用户登录成功: {username}")
+            return True
+        
+        logger.warning(f"用户登录失败: {username}")
+        return False
     
     def upload_pdf(self, file) -> Tuple[str, str]:
         """
@@ -650,6 +715,13 @@ class ModbusGradioApp:
             **kwargs: 传递给gr.Blocks.launch()的参数
         """
         interface = self.create_interface()
+        
+        # 如果启用了鉴权，添加auth参数
+        if self.auth_config.get("enabled", False):
+            logger.info("鉴权功能已启用")
+            kwargs["auth"] = self._validate_credentials
+            kwargs["auth_message"] = "请输入用户名和密码进行登录"
+        
         interface.launch(**kwargs)
 
 

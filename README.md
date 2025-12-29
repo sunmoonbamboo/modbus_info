@@ -10,6 +10,7 @@
 - 🤖 **AI提取**：通过OpenRouter使用Gemini 2.5 Pro模型智能提取Modbus点位信息
 - 📊 **CSV导出**：标准化的CSV格式输出，方便导入其他系统
 - 🔄 **批量处理**：支持批量处理多个PDF文件
+- 🔐 **安全鉴权**：基于配置文件的用户认证，支持动态添加用户
 - ✅ **完整测试**：包含单元测试和集成测试
 
 ## 快速开始
@@ -89,32 +90,70 @@ FILE_SERVER_URL=http://localhost:8080     # 使用官方API时需要
 
 ### 4. 使用方法
 
-#### 单文件处理（使用已有的Markdown文件）
+#### 方式1：Web界面（推荐）
+
+启动Gradio Web界面：
+
+```bash
+# 使用默认配置
+uv run python app.py
+
+# 或使用批处理文件
+启动UI界面.bat
+
+# 或指定端口
+uv run python app.py --port 8860
+```
+
+然后在浏览器中访问：http://localhost:8860
+
+**鉴权功能**：
+- 默认用户：`admin` / `admin123`
+- 配置文件：`config/auth.json`
+- 支持动态添加用户，无需重启应用
+- 详细说明：查看 [鉴权使用指南](AUTHENTICATION_GUIDE.md)
+
+**用户管理工具**：
+
+```bash
+# 运行用户管理工具
+uv run python manage_users.py
+
+# 功能包括：
+# - 查看所有用户
+# - 添加/删除用户
+# - 修改密码
+# - 启用/禁用鉴权
+```
+
+#### 方式2：命令行
+
+##### 单文件处理（使用已有的Markdown文件）
 
 ```bash
 uv run python main.py data/src/your_modbus_protocol.pdf
 # 输出文件将自动命名为：data/output/20241216_160230.csv（时间戳格式）
 ```
 
-#### 重新解析PDF
+##### 重新解析PDF
 
 ```bash
 uv run python main.py data/src/your_modbus_protocol.pdf --parse-pdf
 ```
 
-#### 指定输出路径（自定义文件名）
+##### 指定输出路径（自定义文件名）
 
 ```bash
 uv run python main.py data/src/your_modbus_protocol.pdf -o output/my_result.csv
 ```
 
-#### 批量处理
+##### 批量处理
 
 ```bash
 uv run python main.py data/src/ --batch
 ```
 
-#### 自定义控制器名称
+##### 自定义控制器名称
 
 ```bash
 uv run python main.py data/src/your_modbus_protocol.pdf -c ECR_01
@@ -185,6 +224,9 @@ uv run pytest --cov=src
 
 # 跳过集成测试（不需要API密钥）
 uv run pytest -m "not integration"
+
+# 测试鉴权功能
+uv run python test_auth.py
 ```
 
 ## 输出格式
@@ -232,21 +274,37 @@ uv run pytest -m "not integration"
 
 ## 常见问题
 
-### 1. API调用失败
+### 1. 鉴权相关
+
+**Q: 如何启用/禁用鉴权？**  
+A: 编辑 `config/auth.json`，设置 `"enabled": true` 或 `false`
+
+**Q: 忘记密码怎么办？**  
+A: 直接编辑 `config/auth.json` 修改密码，或使用 `manage_users.py` 工具
+
+**Q: 如何添加新用户？**  
+A: 运行 `uv run python manage_users.py` 使用交互式工具，或直接编辑 `config/auth.json`
+
+**Q: 修改配置后需要重启吗？**  
+A: 不需要！配置会在下次登录时自动重新加载
+
+详细说明请查看：[鉴权使用指南](AUTHENTICATION_GUIDE.md)
+
+### 2. API调用失败
 
 确保：
 - OpenRouter API密钥正确配置在 `.env` 文件中
 - 网络连接正常
 - OpenRouter账户有足够的额度
 
-### 2. PDF解析失败
+### 3. PDF解析失败
 
 确保：
 - PDF文件格式正常，未加密
 - 文件路径正确
 - 有足够的磁盘空间存储临时文件
 
-### 3. 测试失败
+### 4. 测试失败
 
 某些集成测试需要：
 - 配置 `.env` 文件
