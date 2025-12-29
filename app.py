@@ -7,6 +7,7 @@ import shutil
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
+import argparse
 
 from loguru import logger
 
@@ -654,6 +655,24 @@ class ModbusGradioApp:
 
 def main():
     """主函数"""
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description="Modbus协议信息提取工具 - Gradio Web界面")
+    parser.add_argument(
+        "--server-name",
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="服务器地址，默认为 0.0.0.0（监听所有网络接口）"
+    )
+    parser.add_argument(
+        "--server-port",
+        "--port",
+        type=int,
+        default=8860,
+        help="服务器端口，默认为 8860"
+    )
+    args = parser.parse_args()
+    
     # 配置日志
     logger.add(
         "logs/gradio_app_{time}.log",
@@ -662,11 +681,13 @@ def main():
         level="INFO"
     )
     
+    logger.info(f"启动服务器: {args.server_name}:{args.server_port}")
+    
     # 创建并启动应用
     app = ModbusGradioApp()
     app.launch(
-        server_name="0.0.0.0",
-        server_port=8860,
+        server_name=args.server_name,
+        server_port=args.server_port,
         share=False,
         show_error=True
     )
